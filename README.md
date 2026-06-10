@@ -76,28 +76,7 @@ Se calcula la matriz de covarianzas de los datos activos (estandarizados o no) y
 
 ---
 
-## 3. Despliegue en GitHub Pages
-
-1. Crear un repositorio nuevo (público) en GitHub, por ejemplo `cluster-lab-usarrests`.
-2. Agregar el archivo HTML del laboratorio con el nombre `index.html` en la raíz del repositorio (o dentro de una carpeta `/docs`).
-3. Agregar este archivo como `README.md` en la raíz.
-4. Ir a **Settings → Pages**, y en *Source* seleccionar la rama (`main`) y la carpeta (`/root` o `/docs` según corresponda).
-5. Guardar; GitHub generará una URL del tipo `https://<usuario>.github.io/cluster-lab-usarrests/`.
-6. La página quedará disponible públicamente y se actualizará automáticamente con cada `push` a la rama configurada.
-
----
-
-## 4. Estructura del repositorio sugerida
-
-```
-cluster-lab-usarrests/
-├── index.html      # Laboratorio interactivo (HTML + JS + D3, autocontenido)
-└── README.md        # Este archivo
-```
-
----
-
-## 5. Créditos y referencias
+## 3. Créditos y referencias
 
 - Dataset: *USArrests* (McNeil, D. R., 1977; incluido en el paquete base `datasets` de R).
 - Visualización: [D3.js](https://d3js.org/) v7.
