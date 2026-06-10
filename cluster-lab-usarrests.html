@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio de Análisis de Clúster — USArrests</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root{
+  --bg:#0f1320; --panel:#1b2030; --panel2:#222838; --text:#e8eaf2; --muted:#9aa3b8;
+  --accent:#5dd0c0; --accent2:#f4a259; --border:#323a52;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}
+header{padding:24px 28px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#1b2030,#262d44);}
+header h1{margin:0 0 6px 0;font-size:1.5rem;}
+header p{margin:0;color:var(--muted);font-size:.95rem;max-width:900px;}
+.container{padding:20px 28px 60px;max-width:1300px;margin:0 auto;}
+.controls{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:22px;position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);}
+.ctrl{display:flex;flex-direction:column;gap:6px;font-size:.85rem;color:var(--muted);}
+.ctrl label.title{color:var(--text);font-weight:600;}
+select,input[type=range]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:.9rem;}
+.checkbox-row{display:flex;align-items:center;gap:8px;}
+.checkbox-row input{width:18px;height:18px;}
+.radio-row{display:flex;gap:14px;}
+.radio-row label{display:flex;align-items:center;gap:6px;font-weight:400;color:var(--text);cursor:pointer;}
+.kval{color:var(--accent);font-weight:700;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px;margin-bottom:20px;}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;}
+.panel h2{margin-top:0;font-size:1.05rem;border-bottom:1px solid var(--border);padding-bottom:8px;}
+.panel.full{grid-column:1/-1;}
+table{border-collapse:collapse;width:100%;font-size:.82rem;}
+table th,table td{border:1px solid var(--border);padding:5px 7px;text-align:right;}
+table th{background:var(--panel2);color:var(--accent);}
+table td:first-child,table th:first-child{text-align:left;color:var(--muted);}
+.heatmap-wrap{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
+.heatmap{display:grid;gap:2px;}
+.heatcell{display:flex;align-items:center;justify-content:center;font-size:.78rem;border-radius:3px;color:#0b0e16;font-weight:600;min-width:64px;min-height:48px;}
+.heatlabel{font-size:.75rem;color:var(--muted);display:flex;align-items:center;justify-content:center;}
+.legend{font-size:.8rem;color:var(--muted);}
+.charts-row{display:flex;gap:14px;flex-wrap:wrap;justify-content:space-around;}
+.chart-box{text-align:center;}
+.chart-box h3{font-size:.85rem;color:var(--accent2);margin:6px 0;}
+svg{overflow:visible;}
+.axis text{fill:var(--muted);font-size:.7rem;}
+.axis path,.axis line{stroke:var(--border);}
+.line-path{fill:none;stroke:var(--accent);stroke-width:2;}
+.dot{fill:var(--accent);}
+.dendro-link{fill:none;stroke:#555f7c;stroke-width:1.5;}
+.dendro-leaf-label{font-size:.62rem;fill:var(--muted);}
+.scatter-point{stroke:#0b0e16;stroke-width:.6;}
+.scatter-label{font-size:.6rem;fill:var(--muted);pointer-events:none;}
+.hull{fill-opacity:.12;stroke-width:1.5;stroke-opacity:.6;}
+.note{font-size:.8rem;color:var(--muted);margin-top:8px;}
+.badge{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:.75rem;color:var(--accent);margin-left:6px;}
+.tooltip{position:absolute;background:#0b0e16;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.78rem;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
+footer{text-align:center;color:var(--muted);font-size:.78rem;padding:24px;border-top:1px solid var(--border);}
+a{color:var(--accent);}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 Laboratorio interactivo de Análisis de Clúster — USArrests</h1>
+  <p>Explorá estandarización, matrices de covarianza/correlación, medidas de distancia, criterios para el número óptimo de clústers, K-Means y clustering jerárquico aglomerativo (con dendrograma) y la proyección PCA del espacio de observaciones.</p>
+</header>
+
+<div class="container">
+
+  <div class="controls">
+    <div class="ctrl">
+      <label class="title">Variables</label>
+      <div class="checkbox-row">
+        <input type="checkbox" id="standardize" checked>
+        <label for="standardize">Estandarizar (z-score)</label>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label class="title" for="distMethod">Medida de distancia</label>
+      <select id="distMethod">
+        <option value="euclidean" selected>Euclídea</option>
+        <option value="manhattan">Manhattan</option>
+        <option value="pearson">1 − Correlación de Pearson</option>
+        <option value="spearman">1 − Correlación de Spearman</option>
+        <option value="kendall">1 − Tau de Kendall</option>
+        <option value="eisen">Eisen (cosenoidal)</option>
+      </select>
+    </div>
+
+    <div class="ctrl">
+      <label class="title">Método de clustering</label>
+      <div class="radio-row">
+        <label><input type="radio" name="method" value="kmeans" checked> K-Means</label>
+        <label><input type="radio" name="method" value="hier"> Jerárquico</label>
+      </div>
+    </div>
+
+    <div class="ctrl" id="linkageWrap" style="display:none;">
+      <label class="title" for="linkage">Enlace (linkage)</label>
+      <select id="linkage">
+        <option value="average" selected>Promedio (UPGMA)</option>
+        <option value="complete">Completo</option>
+        <option value="single">Simple</option>
+        <option value="ward">Ward</option>
+      </select>
+    </div>
+
+    <div class="ctrl">
+      <label class="title" for="kSlider">Número de clústers (k = <span class="kval" id="kVal">3</span>)</label>
+      <input type="range" id="kSlider" min="2" max="10" value="3" step="1">
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1️⃣ Matriz de covarianzas</h2>
+      <div id="covTable"></div>
+    </div>
+    <div class="panel">
+      <h2>2️⃣ Matriz de correlaciones</h2>
+      <div id="corTable"></div>
+    </div>
+    <div class="panel full">
+      <h2>3️⃣ Heatmap de correlaciones</h2>
+      <div class="heatmap-wrap">
+        <div id="heatmap"></div>
+        <div class="legend" id="heatLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <h2>4️⃣ Número óptimo de clústers</h2>
+    <p class="note">Calculado vía K-Means (k = 1..8, 10 inicializaciones cada uno) sobre los datos activos (estandarizados o no, según el control superior).</p>
+    <div class="charts-row">
+      <div class="chart-box"><h3>Método del codo (WCSS)</h3><svg id="elbowChart" width="320" height="220"></svg></div>
+      <div class="chart-box"><h3>Coeficiente de silueta promedio</h3><svg id="silChart" width="320" height="220"></svg></div>
+      <div class="chart-box"><h3>Índice de Calinski–Harabasz</h3><svg id="chChart" width="320" height="220"></svg></div>
+    </div>
+  </div>
+
+  <div class="panel full" id="dendroPanel" style="display:none;">
+    <h2>5️⃣ Dendrograma <span class="badge" id="dendroBadge"></span></h2>
+    <div style="overflow-x:auto;">
+      <svg id="dendroChart" width="1180" height="430"></svg>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <h2>6️⃣ Espacio de observaciones (PCA) y regiones de clúster <span class="badge" id="pcaBadge"></span></h2>
+    <svg id="pcaChart" width="760" height="540"></svg>
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer>
+  Herramienta educativa autocontenida — dataset <em>USArrests</em> (R datasets). Apta para despliegue en GitHub Pages.
+</footer>
+
+<script>
+/* ============ DATOS: USArrests ============ */
+const STATES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming"];
+const ABBR = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+const VARS = ["Murder","Assault","UrbanPop","Rape"];
+const RAW = [
+[13.2,236,58,21.2],[10.0,263,48,44.5],[8.1,294,80,31.0],[8.8,190,50,19.5],[9.0,276,91,40.6],
+[7.9,204,78,38.7],[3.3,110,77,11.1],[5.9,238,72,15.8],[15.4,335,80,31.9],[17.4,211,60,25.8],
+[5.3,46,83,20.2],[2.6,120,54,14.2],[10.4,249,83,24.0],[7.2,113,65,21.0],[2.2,56,57,11.3],
+[6.0,115,66,18.0],[9.7,109,52,16.3],[15.4,249,66,22.2],[2.1,83,51,7.8],[11.3,300,67,27.8],
+[4.4,149,85,16.3],[12.1,255,74,35.1],[2.7,72,66,14.9],[16.1,259,44,17.1],[9.0,178,70,28.2],
+[6.0,109,53,16.4],[4.3,102,62,16.5],[12.2,252,81,46.0],[2.1,57,56,9.5],[7.4,159,89,18.8],
+[11.4,285,70,32.1],[11.1,254,86,26.1],[13.0,337,45,16.1],[0.8,45,44,7.3],[7.3,120,75,21.4],
+[6.6,151,68,20.0],[4.9,159,67,29.3],[6.3,106,72,14.9],[3.4,174,87,8.3],[14.4,279,48,22.5],
+[3.8,86,45,12.8],[13.2,188,59,26.9],[12.7,201,80,25.5],[3.2,120,80,22.9],[2.2,48,32,11.2],
+[8.5,156,63,20.7],[4.0,145,73,26.2],[5.7,81,39,9.3],[2.6,53,66,10.8],[6.8,161,60,15.6]
+];
+const N = RAW.length, P = VARS.length;
+
+/* ============ UTILIDADES NUMÉRICAS ============ */
+function colMeans(m){const p=m[0].length,n=m.length;const r=new Array(p).fill(0);for(const row of m)for(let j=0;j<p;j++)r[j]+=row[j];return r.map(x=>x/n);}
+function colSds(m,means){const p=m[0].length,n=m.length;const r=new Array(p).fill(0);for(const row of m)for(let j=0;j<p;j++)r[j]+=(row[j]-means[j])**2;return r.map(x=>Math.sqrt(x/(n-1)));}
+function standardize(m){const means=colMeans(m),sds=colSds(m,means);return m.map(row=>row.map((v,j)=>(v-means[j])/sds[j]));}
+function center(m){const means=colMeans(m);return m.map(row=>row.map((v,j)=>v-means[j]));}
+function covMatrix(m){
+  const n=m.length,p=m[0].length,means=colMeans(m);
+  const C=Array.from({length:p},()=>new Array(p).fill(0));
+  for(const row of m)for(let i=0;i<p;i++)for(let j=0;j<p;j++) C[i][j]+=(row[i]-means[i])*(row[j]-means[j]);
+  for(let i=0;i<p;i++)for(let j=0;j<p;j++) C[i][j]/=(n-1);
+  return C;
+}
+function corFromCov(C){
+  const p=C.length;const R=Array.from({length:p},()=>new Array(p).fill(0));
+  for(let i=0;i<p;i++)for(let j=0;j<p;j++) R[i][j]=C[i][j]/Math.sqrt(C[i][i]*C[j][j]);
+  return R;
+}
+function rank(arr){
+  const idx=arr.map((v,i)=>i).sort((a,b)=>arr[a]-arr[b]);
+  const r=new Array(arr.length);
+  let i=0;
+  while(i<idx.length){
+    let j=i;
+    while(j+1<idx.length && arr[idx[j+1]]===arr[idx[i]]) j++;
+    const avg=(i+j)/2+1;
+    for(let k=i;k<=j;k++) r[idx[k]]=avg;
+    i=j+1;
+  }
+  return r;
+}
+function pearson(a,b){
+  const n=a.length,ma=a.reduce((x,y)=>x+y,0)/n, mb=b.reduce((x,y)=>x+y,0)/n;
+  let num=0,da=0,db=0;
+  for(let i=0;i<n;i++){num+=(a[i]-ma)*(b[i]-mb); da+=(a[i]-ma)**2; db+=(b[i]-mb)**2;}
+  if(da===0||db===0) return 0;
+  return num/Math.sqrt(da*db);
+}
+function spearman(a,b){return pearson(rank(a),rank(b));}
+function kendall(a,b){
+  const n=a.length;let C=0,D=0,Tx=0,Ty=0;
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+    const da=a[i]-a[j], db=b[i]-b[j];
+    if(da===0 && db===0){Tx++;Ty++;continue;}
+    if(da===0){Tx++;continue;}
+    if(db===0){Ty++;continue;}
+    if(da*db>0) C++; else D++;
+  }
+  const denom=Math.sqrt((C+D+Tx)*(C+D+Ty));
+  return denom===0?0:(C-D)/denom;
+}
+function cosineSim(a,b){
+  let dot=0,na=0,nb=0;
+  for(let i=0;i<a.length;i++){dot+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}
+  if(na===0||nb===0) return 0;
+  return dot/Math.sqrt(na*nb);
+}
+function distFn(method){
+  switch(method){
+    case "euclidean": return (a,b)=>Math.sqrt(a.reduce((s,v,i)=>s+(v-b[i])**2,0));
+    case "manhattan": return (a,b)=>a.reduce((s,v,i)=>s+Math.abs(v-b[i]),0);
+    case "pearson": return (a,b)=>1-pearson(a,b);
+    case "spearman": return (a,b)=>1-spearman(a,b);
+    case "kendall": return (a,b)=>1-kendall(a,b);
+    case "eisen": return (a,b)=>1-cosineSim(a,b);
+  }
+}
+function distanceMatrix(m,method){
+  const f=distFn(method),n=m.length;
+  const D=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const d=f(m[i],m[j]);D[i][j]=d;D[j][i]=d;}
+  return D;
+}
+
+/* ===== Jacobi eigen-decomposition (matriz simétrica pequeña) ===== */
+function jacobiEigen(Ain){
+  const n=Ain.length;
+  let A=Ain.map(r=>r.slice());
+  let V=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>i===j?1:0));
+  for(let iter=0;iter<100;iter++){
+    let p=0,q=1,max=0;
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++) if(Math.abs(A[i][j])>max){max=Math.abs(A[i][j]);p=i;q=j;}
+    if(max<1e-12) break;
+    const app=A[p][p],aqq=A[q][q],apq=A[p][q];
+    const phi=0.5*Math.atan2(2*apq, aqq-app);
+    const c=Math.cos(phi), s=Math.sin(phi);
+    for(let k=0;k<n;k++){
+      const akp=A[k][p], akq=A[k][q];
+      A[k][p]=c*akp - s*akq; A[k][q]=s*akp + c*akq;
+    }
+    for(let k=0;k<n;k++){
+      const apk=A[p][k], aqk=A[q][k];
+      A[p][k]=c*apk - s*aqk; A[q][k]=s*apk + c*aqk;
+    }
+    for(let k=0;k<n;k++){
+      const vkp=V[k][p], vkq=V[k][q];
+      V[k][p]=c*vkp - s*vkq; V[k][q]=s*vkp + c*vkq;
+    }
+  }
+  const values=A.map((row,i)=>row[i]);
+  const order=values.map((v,i)=>i).sort((a,b)=>values[b]-values[a]);
+  const sortedValues=order.map(i=>values[i]);
+  const sortedVectors=order.map(i=>V.map(row=>row[i])); // each is a vector (array length n)
+  return {values:sortedValues, vectors:sortedVectors};
+}
+
+/* ===== K-means (k-means++ , múltiples inicios, RNG con semilla) ===== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function kmeansOnce(data,k,rng){
+  const n=data.length,p=data[0].length;
+  // k-means++ init
+  const centers=[];
+  centers.push(data[Math.floor(rng()*n)].slice());
+  while(centers.length<k){
+    const d2=data.map(row=>Math.min(...centers.map(c=>c.reduce((s,v,i)=>s+(v-row[i])**2,0))));
+    const sum=d2.reduce((a,b)=>a+b,0);
+    let r=rng()*sum, idx=0;
+    for(;idx<n;idx++){r-=d2[idx]; if(r<=0) break;}
+    centers.push(data[Math.min(idx,n-1)].slice());
+  }
+  let labels=new Array(n).fill(0);
+  for(let iter=0;iter<100;iter++){
+    let changed=false;
+    for(let i=0;i<n;i++){
+      let best=0,bd=Infinity;
+      for(let c=0;c<k;c++){
+        const d=centers[c].reduce((s,v,j)=>s+(v-data[i][j])**2,0);
+        if(d<bd){bd=d;best=c;}
+      }
+      if(labels[i]!==best){labels[i]=best;changed=true;}
+    }
+    const sums=Array.from({length:k},()=>new Array(p).fill(0));
+    const counts=new Array(k).fill(0);
+    for(let i=0;i<n;i++){counts[labels[i]]++;for(let j=0;j<p;j++) sums[labels[i]][j]+=data[i][j];}
+    for(let c=0;c<k;c++) if(counts[c]>0) for(let j=0;j<p;j++) centers[c][j]=sums[c][j]/counts[c];
+    if(!changed) break;
+  }
+  let wcss=0;
+  for(let i=0;i<n;i++) wcss+=centers[labels[i]].reduce((s,v,j)=>s+(v-data[i][j])**2,0);
+  return {labels,centers,wcss};
+}
+function kmeans(data,k,nInit=10,seedBase=42){
+  let best=null;
+  for(let i=0;i<nInit;i++){
+    const rng=mulberry32(seedBase + i*97 + k*131);
+    const r=kmeansOnce(data,k,rng);
+    if(!best || r.wcss<best.wcss) best=r;
+  }
+  return best;
+}
+
+/* ===== Métricas de validación de clusters ===== */
+function silhouette(D,labels,k){
+  const n=labels.length;
+  if(k<2) return 0;
+  let total=0,count=0;
+  for(let i=0;i<n;i++){
+    const ci=labels[i];
+    let aSum=0,aCnt=0;
+    const bSums=new Array(k).fill(0), bCnts=new Array(k).fill(0);
+    for(let j=0;j<n;j++){
+      if(j===i) continue;
+      if(labels[j]===ci){aSum+=D[i][j];aCnt++;}
+      else{bSums[labels[j]]+=D[i][j];bCnts[labels[j]]++;}
+    }
+    if(aCnt===0) continue;
+    const a=aSum/aCnt;
+    let b=Infinity;
+    for(let c=0;c<k;c++) if(c!==ci && bCnts[c]>0) b=Math.min(b,bSums[c]/bCnts[c]);
+    if(!isFinite(b)) continue;
+    const s=(b-a)/Math.max(a,b);
+    total+=s;count++;
+  }
+  return count?total/count:0;
+}
+function chIndex(data,labels,k){
+  const n=data.length,p=data[0].length;
+  if(k<2) return 0;
+  const overall=colMeans(data);
+  const centroids=Array.from({length:k},()=>new Array(p).fill(0));
+  const counts=new Array(k).fill(0);
+  for(let i=0;i<n;i++){counts[labels[i]]++;for(let j=0;j<p;j++) centroids[labels[i]][j]+=data[i][j];}
+  for(let c=0;c<k;c++) if(counts[c]>0) for(let j=0;j<p;j++) centroids[c][j]/=counts[c];
+  let bss=0;
+  for(let c=0;c<k;c++) if(counts[c]>0) bss += counts[c]*centroids[c].reduce((s,v,j)=>s+(v-overall[j])**2,0);
+  let wss=0;
+  for(let i=0;i<n;i++) wss += centroids[labels[i]].reduce((s,v,j)=>s+(v-data[i][j])**2,0);
+  if(wss===0) return 0;
+  return (bss/(k-1))/(wss/(n-k));
+}
+
+/* ===== Clustering jerárquico aglomerativo (Lance-Williams) ===== */
+function hclust(D0,linkage){
+  const n=D0.length;
+  let active=Array.from({length:n},(_,i)=>({id:i,members:[i],height:0,left:null,right:null,size:1}));
+  let D=D0.map(r=>r.slice());
+  let nextId=n;
+  while(active.length>1){
+    let bi=0,bj=1,bd=Infinity;
+    for(let i=0;i<active.length;i++)for(let j=i+1;j<active.length;j++) if(D[i][j]<bd){bd=D[i][j];bi=i;bj=j;}
+    const ci=active[bi],cj=active[bj];
+    const newNode={id:nextId++,members:ci.members.concat(cj.members),height:bd,left:ci,right:cj,size:ci.size+cj.size};
+    const newRow=[];
+    for(let k=0;k<active.length;k++){
+      if(k===bi||k===bj) continue;
+      const ck=active[k];
+      const dik=D[bi][k], djk=D[bj][k], dij=D[bi][bj];
+      const ni=ci.size, nj=cj.size, nk=ck.size;
+      let val;
+      if(linkage==="single") val=0.5*dik+0.5*djk-0.5*Math.abs(dik-djk);
+      else if(linkage==="complete") val=0.5*dik+0.5*djk+0.5*Math.abs(dik-djk);
+      else if(linkage==="average") val=(ni*dik+nj*djk)/(ni+nj);
+      else { // ward
+        const sum=ni+nj+nk;
+        val=((ni+nk)/sum)*dik + ((nj+nk)/sum)*djk - (nk/sum)*dij;
+      }
+      newRow.push(val);
+    }
+    // build new D excluding bi,bj, appending newRow/newCol
+    const keepIdx=[]; for(let k=0;k<active.length;k++) if(k!==bi&&k!==bj) keepIdx.push(k);
+    const newD=[];
+    for(let a=0;a<keepIdx.length;a++){
+      const row=[];
+      for(let b=0;b<keepIdx.length;b++) row.push(D[keepIdx[a]][keepIdx[b]]);
+      row.push(newRow[a]);
+      newD.push(row);
+    }
+    const lastRow=newRow.slice(); lastRow.push(0);
+    newD.push(lastRow);
+    D=newD;
+    active=keepIdx.map(k=>active[k]);
+    active.push(newNode);
+  }
+  return active[0];
+}
+// Devuelve {labels[], roots[], splitNodes:Set, root}
+function cutTree(root,k){
+  if(k<=1) return {labels:new Array(root.size).fill(0), roots:[root], splitNodes:new Set()};
+  const splitNodes=new Set();
+  let frontier=[root];
+  while(frontier.length<k){
+    // pop node with max height that has children
+    let bi=-1,bh=-Infinity;
+    for(let i=0;i<frontier.length;i++) if(frontier[i].left && frontier[i].height>bh){bh=frontier[i].height;bi=i;}
+    if(bi===-1) break;
+    const node=frontier[bi];
+    splitNodes.add(node.id);
+    frontier.splice(bi,1,node.left,node.right);
+  }
+  const n=root.size;
+  const labels=new Array(n).fill(0);
+  frontier.forEach((node,c)=>{ for(const m of node.members) labels[m]=c; });
+  return {labels,roots:frontier,splitNodes};
+}
+
+/* ===== Convex hull (d3.polygonHull wrapper, maneja <3 puntos) ===== */
+function safeHull(points){
+  if(points.length<3) return null;
+  return d3.polygonHull(points);
+}
+
+/* ============ ESTADO Y RENDER ============ */
+const state={standardize:true, distMethod:"euclidean", method:"kmeans", linkage:"average", k:3};
+const tooltip=d3.select("#tooltip");
+
+function fmt(x,d=2){return Number(x).toFixed(d);}
+
+function getActiveData(){
+  return state.standardize?standardize(RAW):RAW.map(r=>r.slice());
+}
+
+function renderMatrices(data){
+  const C=covMatrix(data), R=corFromCov(C);
+  function table(M,deco){
+    let h="<table><tr><th></th>"+VARS.map(v=>`<th>${v}</th>`).join("")+"</tr>";
+    for(let i=0;i<P;i++){
+      h+=`<tr><th>${VARS[i]}</th>`+M[i].map(v=>`<td>${fmt(v, deco)}</td>`).join("")+"</tr>";
+    }
+    h+="</table>";
+    return h;
+  }
+  document.getElementById("covTable").innerHTML=table(C,3);
+  document.getElementById("corTable").innerHTML=table(R,3);
+
+  // heatmap
+  const hm=document.getElementById("heatmap");
+  hm.setAttribute("style",`display:grid;gap:2px;grid-template-columns:70px repeat(${P},64px);grid-auto-rows:48px;`);
+  hm.innerHTML="";
+  const color=d3.scaleSequential(d3.interpolateRdBu).domain([1,-1]);
+  hm.innerHTML+=`<div></div>`+VARS.map(v=>`<div class="heatlabel">${v}</div>`).join("");
+  for(let i=0;i<P;i++){
+    hm.innerHTML+=`<div class="heatlabel">${VARS[i]}</div>`;
+    for(let j=0;j<P;j++){
+      const v=R[i][j];
+      hm.innerHTML+=`<div class="heatcell" style="background:${color(v)}">${fmt(v,2)}</div>`;
+    }
+  }
+  document.getElementById("heatLegend").innerHTML=
+    `<div style="margin-bottom:6px;">Escala de color (correlación de Pearson):</div>
+     <div style="display:flex;align-items:center;gap:6px;">
+       <span>-1</span><div style="width:140px;height:14px;background:linear-gradient(to right, ${color(-1)}, ${color(0)}, ${color(1)})"></div><span>+1</span>
+     </div>
+     <div style="margin-top:10px;">Las matrices se calculan sobre los datos
+     ${state.standardize?'<b>estandarizados</b> (la matriz de covarianzas coincide con la de correlaciones)':'<b>originales (sin estandarizar)</b>'}.</div>`;
+}
+
+function lineChart(svgId,points,opts={}){
+  const svg=d3.select("#"+svgId);
+  svg.selectAll("*").remove();
+  const m={top:14,right:14,bottom:30,left:42}, w=+svg.attr("width")-m.left-m.right, h=+svg.attr("height")-m.top-m.bottom;
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+  const x=d3.scaleLinear().domain(d3.extent(points,d=>d.k)).range([0,w]);
+  const y=d3.scaleLinear().domain([Math.min(0,d3.min(points,d=>d.v)), d3.max(points,d=>d.v)*1.05]).range([h,0]).nice();
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(points.length).tickFormat(d3.format("d")));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(5));
+  const line=d3.line().x(d=>x(d.k)).y(d=>y(d.v));
+  g.append("path").datum(points).attr("class","line-path").attr("d",line);
+  g.selectAll("circle").data(points).join("circle")
+    .attr("class","dot").attr("cx",d=>x(d.k)).attr("cy",d=>y(d.v)).attr("r",4)
+    .style("cursor","pointer")
+    .on("mouseover",(e,d)=>{
+      tooltip.style("opacity",1).html(`k = ${d.k}<br>valor = ${fmt(d.v,3)}`)
+        .style("left",(e.pageX+10)+"px").style("top",(e.pageY-25)+"px");
+    })
+    .on("mouseout",()=>tooltip.style("opacity",0));
+  if(opts.highlightK!==undefined){
+    const hp=points.find(p=>p.k===opts.highlightK);
+    if(hp) g.append("circle").attr("cx",x(hp.k)).attr("cy",y(hp.v)).attr("r",7)
+      .attr("fill","none").attr("stroke","var(--accent2)").attr("stroke-width",2);
+  }
+  g.append("text").attr("x",w/2).attr("y",h+28).attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size","0.72rem").text("k (número de clusters)");
+}
+
+function renderOptimalK(data,D){
+  const ks=[1,2,3,4,5,6,7,8];
+  const wcssPts=[], silPts=[], chPts=[];
+  for(const k of ks){
+    const r=kmeans(data,k);
+    wcssPts.push({k,v:r.wcss});
+    if(k>=2){
+      silPts.push({k,v:silhouette(D,r.labels,k)});
+      chPts.push({k,v:chIndex(data,r.labels,k)});
+    }
+  }
+  lineChart("elbowChart",wcssPts,{highlightK:state.k});
+  lineChart("silChart",silPts,{highlightK:state.k});
+  lineChart("chChart",chPts,{highlightK:state.k});
+}
+
+/* ===== Dendrograma ===== */
+function renderDendrogram(root,distMethod,linkage,labels,k,splitNodes,clusterColor){
+  const svg=d3.select("#dendroChart");
+  svg.selectAll("*").remove();
+  document.getElementById("dendroBadge").textContent=`distancia: ${distMethod} · enlace: ${linkage}`;
+  const m={top:14,right:14,bottom:90,left:46};
+  const w=+svg.attr("width")-m.left-m.right, h=+svg.attr("height")-m.top-m.bottom;
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  // in-order leaf positions
+  const order=[];
+  (function inorder(node){ if(!node.left){order.push(node.id);return;} inorder(node.left); inorder(node.right); })(root);
+  const xPos={}; order.forEach((id,i)=>xPos[id]=i);
+  const x=d3.scaleLinear().domain([0,N-1]).range([0,w]);
+  const y=d3.scaleLinear().domain([0,root.height*1.05]).range([h,0]);
+
+  // assign x,y recursively, color
+  function layout(node){
+    if(!node.left){ node._x=xPos[node.id]; node._y=0; node._cluster=labels[node.id]; return node._x; }
+    const lx=layout(node.left), rx=layout(node.right);
+    node._x=(lx+rx)/2; node._y=node.height;
+    node._cluster = splitNodes.has(node.id) ? -1 : labels[node.left.members[0]];
+    return node._x;
+  }
+  layout(root);
+
+  function draw(node){
+    if(node.left){
+      const col = node._cluster===-1 ? "#555f7c" : clusterColor(node._cluster);
+      g.append("path").attr("class","dendro-link").attr("stroke",col)
+        .attr("d",`M${x(node.left._x)},${y(node.left._y)} V${y(node.height)} H${x(node.right._x)} V${y(node.right._y)}`);
+      draw(node.left); draw(node.right);
+    }
+  }
+  draw(root);
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(5));
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`)
+    .call(d3.axisBottom(x).tickValues(order.map((id,i)=>i)).tickFormat(i=>STATES[order[i]]))
+    .selectAll("text").attr("transform","rotate(-65)").attr("text-anchor","end").attr("dx","-.6em").attr("dy",".15em");
+
+  g.append("text").attr("x",-h/2).attr("y",-34).attr("transform","rotate(-90)").attr("text-anchor","middle")
+    .attr("fill","var(--muted)").attr("font-size","0.72rem").text("Altura (distancia de fusión)");
+}
+
+/* ===== PCA scatter ===== */
+function renderPCA(data,labels,k,clusterColor,methodLabel){
+  document.getElementById("pcaBadge").textContent=methodLabel;
+  const cdata=center(data);
+  const C=covMatrix(data);
+  const eig=jacobiEigen(C);
+  const totalVar=eig.values.reduce((a,b)=>a+b,0);
+  const v1=eig.vectors[0], v2=eig.vectors[1];
+  const pct1=(eig.values[0]/totalVar*100).toFixed(1), pct2=(eig.values[1]/totalVar*100).toFixed(1);
+  const scores=cdata.map(row=>[
+    row.reduce((s,val,i)=>s+val*v1[i],0),
+    row.reduce((s,val,i)=>s+val*v2[i],0)
+  ]);
+
+  const svg=d3.select("#pcaChart");
+  svg.selectAll("*").remove();
+  const m={top:20,right:20,bottom:50,left:55}, w=+svg.attr("width")-m.left-m.right, h=+svg.attr("height")-m.top-m.bottom;
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+  const x=d3.scaleLinear().domain(d3.extent(scores,d=>d[0])).nice().range([0,w]);
+  const y=d3.scaleLinear().domain(d3.extent(scores,d=>d[1])).nice().range([h,0]);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y));
+  g.append("text").attr("x",w/2).attr("y",h+40).attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size","0.75rem")
+    .text(`PC1 (${pct1}% varianza explicada)`);
+  g.append("text").attr("x",-h/2).attr("y",-40).attr("transform","rotate(-90)").attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size","0.75rem")
+    .text(`PC2 (${pct2}% varianza explicada)`);
+
+  // hulls per cluster
+  for(let c=0;c<k;c++){
+    const pts=scores.filter((s,i)=>labels[i]===c).map(s=>[x(s[0]),y(s[1])]);
+    const hull=safeHull(pts);
+    if(hull) g.append("polygon").attr("class","hull").attr("points",hull.map(p=>p.join(",")).join(" "))
+      .attr("fill",clusterColor(c)).attr("stroke",clusterColor(c));
+  }
+  // points
+  g.selectAll("circle").data(scores).join("circle")
+    .attr("class","scatter-point")
+    .attr("cx",d=>x(d[0])).attr("cy",d=>y(d[1])).attr("r",6)
+    .attr("fill",(d,i)=>clusterColor(labels[i]))
+    .style("cursor","pointer")
+    .on("mouseover",(e,d)=>{
+      const i=scores.indexOf(d);
+      tooltip.style("opacity",1).html(`<b>${STATES[i]}</b><br>Cluster ${labels[i]+1}<br>PC1=${fmt(d[0],2)} · PC2=${fmt(d[1],2)}`)
+        .style("left",(e.pageX+10)+"px").style("top",(e.pageY-30)+"px");
+    })
+    .on("mouseout",()=>tooltip.style("opacity",0));
+  g.selectAll("text.lbl").data(scores).join("text")
+    .attr("class","scatter-label")
+    .attr("x",d=>x(d[0])+8).attr("y",d=>y(d[1])+3)
+    .text((d,i)=>ABBR[i]);
+}
+
+/* ============ MAIN RENDER ============ */
+function render(){
+  const data=getActiveData();
+  const D=distanceMatrix(data,state.distMethod);
+  const colorScale=d3.scaleOrdinal(d3.schemeTableau10);
+  const clusterColor=c=>colorScale(c);
+
+  renderMatrices(data);
+  renderOptimalK(data,D);
+
+  let labels, methodLabel;
+  if(state.method==="kmeans"){
+    document.getElementById("dendroPanel").style.display="none";
+    const r=kmeans(data,state.k);
+    labels=r.labels;
+    methodLabel=`K-Means · k=${state.k} · datos ${state.standardize?'estandarizados':'originales'}`;
+  } else {
+    document.getElementById("dendroPanel").style.display="";
+    const root=hclust(D,state.linkage);
+    const cut=cutTree(root,state.k);
+    labels=cut.labels;
+    methodLabel=`Jerárquico (${state.linkage}) · k=${state.k} · distancia ${state.distMethod}`;
+    renderDendrogram(root,state.distMethod,state.linkage,labels,state.k,cut.splitNodes,clusterColor);
+  }
+  renderPCA(data,labels,state.k,clusterColor,methodLabel);
+}
+
+/* ============ EVENTOS ============ */
+document.getElementById("standardize").addEventListener("change",e=>{state.standardize=e.target.checked;render();});
+document.getElementById("distMethod").addEventListener("change",e=>{state.distMethod=e.target.value;render();});
+document.getElementById("linkage").addEventListener("change",e=>{state.linkage=e.target.value;render();});
+document.getElementById("kSlider").addEventListener("input",e=>{state.k=+e.target.value;document.getElementById("kVal").textContent=state.k;render();});
+document.querySelectorAll('input[name="method"]').forEach(r=>r.addEventListener("change",e=>{
+  state.method=e.target.value;
+  document.getElementById("linkageWrap").style.display = state.method==="hier" ? "" : "none";
+  render();
+}));
+
+render();
+</script>
+</body>
+</html>
